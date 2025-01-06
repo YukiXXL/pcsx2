@@ -2358,12 +2358,12 @@ void GSRendererHW::Draw()
 				(no_rt || height_invalid ||
 					(tgt = g_texture_cache->GetExactTarget(m_cached_ctx.FRAME.Block(), m_cached_ctx.FRAME.FBW,
 						 GSTextureCache::RenderTarget, rt_end_bp)) == nullptr ||
-					m_r.rintersect(tgt->m_valid).eq(tgt->m_valid));
+					m_r.rintersect(tgt->m_valid).eq(tgt->m_valid) && GSUtil::GetChannelMask(m_cached_ctx.FRAME.PSM) >= GSUtil::GetChannelMask(tgt->m_TEX0.PSM));
 			const bool overwriting_whole_ds =
 				(no_ds || height_invalid ||
 					(tgt = g_texture_cache->GetExactTarget(m_cached_ctx.ZBUF.Block(), m_cached_ctx.FRAME.FBW,
 						 GSTextureCache::DepthStencil, ds_end_bp)) == nullptr ||
-					m_r.rintersect(tgt->m_valid).eq(tgt->m_valid));
+					m_r.rintersect(tgt->m_valid).eq(tgt->m_valid) && GSUtil::GetChannelMask(m_cached_ctx.ZBUF.PSM) >= GSUtil::GetChannelMask(tgt->m_TEX0.PSM));
 
 			if (overwriting_whole_rt && overwriting_whole_ds &&
 				TryGSMemClear(no_rt, preserve_rt_color, is_zero_color_clear, rt_end_bp,
