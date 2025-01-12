@@ -24,6 +24,11 @@
 
 #include <map>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <io.h>
+#endif
+
 static constexpr int MCD_SIZE = 1024 * 8 * 16; // Legacy PSX card default size
 
 static constexpr int MC2_MBSIZE = 1024 * 528 * 2; // Size of a single megabyte of card data
@@ -157,6 +162,8 @@ class FileMemoryCard
 {
 protected:
 	std::FILE* m_file[8] = {};
+	u8* m_mappings[8] = {};
+
 	s64 m_fileSize[8] = {};
 	std::string m_filenames[8] = {};
 	std::vector<u8> m_currentdata;
@@ -337,6 +344,21 @@ void FileMemoryCard::Open()
 				if (read_result == 0)
 					Host::ReportErrorAsync("Memory Card Read Failed", "Error reading memory card.");
 			}
+
+#ifdef _WIN32
+			const int fd = _fileno(m_file[slot]);
+			// Doesn't leak, refcounted based on views
+			const HANDLE hMapping = CreateFileMapping(reinterpret_cast<HANDLE>(_get_osfhandle(fd)), nullptr, PAGE_READWRITE, 0, 0, nullptr);
+			if (!hMapping)
+			{
+				Console.Warning("CreateFileMapping failed: %d", GetLastError());
+			}
+			m_mappings[slot] = reinterpret_cast<u8*>(MapViewOfFile(hMapping, FILE_MAP_ALL_ACCESS, 0, 0, 0));
+			if (!m_mappings[slot])
+			{
+				Console.Warning("MapViewOfFile failed: %d", GetLastError());
+			}
+#endif
 		}
 	}
 }
@@ -364,6 +386,13 @@ void FileMemoryCard::Close()
 
 		m_filenames[slot] = {};
 		m_fileSize[slot] = -1;
+#ifdef _WIN32
+		if (m_mappings[slot])
+		{
+			UnmapViewOfFile(m_mappings[slot]);
+			m_mappings[slot] = nullptr;
+		}
+#endif
 	}
 }
 
@@ -430,9 +459,20 @@ s32 FileMemoryCard::Read(uint slot, u8* dest, u32 adr, int size)
 		memset(dest, 0, size);
 		return 1;
 	}
+
+#ifdef _WIN32
+	if (adr + size > static_cast<u32>(m_fileSize[slot]))
+	{
+		Console.Warning("(FileMcd) Warning: read past end of file. (%d) [%08X]", slot, adr);
+	}
+
+	std::memcpy(dest, m_mappings[slot] + adr, size);
+	return 1;
+#else
 	if (!Seek(mcfp, adr))
 		return 0;
 	return std::fread(dest, size, 1, mcfp) == 1;
+#endif
 }
 
 s32 FileMemoryCard::Save(uint slot, const u8* src, u32 adr, int size)
@@ -516,10 +556,15 @@ s32 FileMemoryCard::EraseBlock(uint slot, u32 adr)
 
 	if (!Seek(mcfp, adr))
 		return 0;
+#ifdef _WIN32
+	std::memset(m_mappings[slot] + adr, 0xff, MC2_ERASE_SIZE);
 
-	u8 buf[MC2_ERASE_SIZE];
-	std::memset(buf, 0xff, sizeof(buf));
-	return std::fwrite(buf, sizeof(buf), 1, mcfp) == 1;
+	return 1;
+#else
+	std::array<u8, MC2_ERASE_SIZE> buffer;
+	std::memset(buffer.data(), 0xff, buffer.size());
+	return std::fwrite(buffer.data(), buffer.size(), 1, mcfp) == 1;
+#endif
 }
 
 u64 FileMemoryCard::GetCRC(uint slot)
