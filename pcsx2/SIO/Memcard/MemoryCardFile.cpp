@@ -10,6 +10,7 @@
 #include "common/Console.h"
 #include "common/Error.h"
 #include "common/FileSystem.h"
+#include "common/HostSys.h"
 #include "common/Path.h"
 #include "common/StringUtil.h"
 
@@ -23,11 +24,6 @@
 #include "fmt/format.h"
 
 #include <map>
-
-#ifdef _WIN32
-#include <windows.h>
-#include <io.h>
-#endif
 
 static constexpr int MCD_SIZE = 1024 * 8 * 16; // Legacy PSX card default size
 
@@ -163,6 +159,7 @@ class FileMemoryCard
 protected:
 	std::FILE* m_file[8] = {};
 	u8* m_mappings[8] = {};
+	void* m_mapping_handles[8] = {};
 
 	s64 m_fileSize[8] = {};
 	std::string m_filenames[8] = {};
@@ -345,20 +342,16 @@ void FileMemoryCard::Open()
 					Host::ReportErrorAsync("Memory Card Read Failed", "Error reading memory card.");
 			}
 
-#ifdef _WIN32
-			const int fd = _fileno(m_file[slot]);
-			// Doesn't leak, refcounted based on views
-			const HANDLE hMapping = CreateFileMapping(reinterpret_cast<HANDLE>(_get_osfhandle(fd)), nullptr, PAGE_READWRITE, 0, 0, nullptr);
-			if (!hMapping)
+			m_mapping_handles[slot] = HostSys::CreateMappingFromFile(m_file[slot]);
+			if (!m_mapping_handles[slot])
 			{
-				Console.Warning("CreateFileMapping failed: %d", GetLastError());
+				Console.Warning("CreateMappingFromFile failed!");
 			}
-			m_mappings[slot] = reinterpret_cast<u8*>(MapViewOfFile(hMapping, FILE_MAP_ALL_ACCESS, 0, 0, 0));
+			m_mappings[slot] = static_cast<u8*>(HostSys::MapMapping(m_mapping_handles[slot], PageAccess_ReadWrite()));
 			if (!m_mappings[slot])
 			{
-				Console.Warning("MapViewOfFile failed: %d", GetLastError());
+				Console.Warning("MapSharedMemory failed!");
 			}
-#endif
 		}
 	}
 }
@@ -386,13 +379,13 @@ void FileMemoryCard::Close()
 
 		m_filenames[slot] = {};
 		m_fileSize[slot] = -1;
-#ifdef _WIN32
+
 		if (m_mappings[slot])
 		{
-			UnmapViewOfFile(m_mappings[slot]);
+			HostSys::UnmapSharedMemory(m_mappings[slot], 0);
+			HostSys::DestroyMapping(m_mapping_handles[slot]);
 			m_mappings[slot] = nullptr;
 		}
-#endif
 	}
 }
 
