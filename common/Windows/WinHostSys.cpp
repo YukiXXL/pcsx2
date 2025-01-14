@@ -78,7 +78,7 @@ void* HostSys::CreateMappingFromFile(FILE* fd)
 		0, 0, nullptr));
 }
 
-void* HostSys::MapMapping(void* handle, const PageProtectionMode& mode)
+void* HostSys::MapMapping(void* handle, size_t size, const PageProtectionMode& mode)
 {
 	return MapViewOfFile(static_cast<HANDLE>(handle), FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, 0);
 }

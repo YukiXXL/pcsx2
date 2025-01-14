@@ -120,9 +120,9 @@ void* HostSys::CreateMappingFromFile(FILE* file)
 	return reinterpret_cast<void*>(static_cast<intptr_t>(fileno(file)));
 }
 
-void* HostSys::MapMapping(void* handle, const PageProtectionMode& mode)
+void* HostSys::MapMapping(void* handle, size_t size, const PageProtectionMode& mode)
 {
-	return HostSys::MapSharedMemory(handle, 0, nullptr, 0, mode);
+	return HostSys::MapSharedMemory(handle, 0, nullptr, size, mode);
 }
 
 void HostSys::DestroyMapping(void* handle)
