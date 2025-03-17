@@ -131,6 +131,11 @@ void HostSys::DestroyMapping(void* handle)
 	return;
 }
 
+void HostSys::FlushMapping(void* handle, [[maybe_unused]] void* baseAddr, size_t size)
+{
+	msync(handle, size, MS_SYNC);
+}
+
 void HostSys::DestroySharedMemory(void* ptr)
 {
 	close(static_cast<int>(reinterpret_cast<intptr_t>(ptr)));

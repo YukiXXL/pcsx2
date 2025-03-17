@@ -88,6 +88,11 @@ void HostSys::DestroyMapping(void* handle)
 	CloseHandle(static_cast<HANDLE>(handle));
 }
 
+void HostSys::FlushMapping([[maybe_unused]] void* handle, void* baseAddr, size_t size)
+{
+	FlushViewOfFile(baseAddr, size);
+}
+
 void HostSys::DestroySharedMemory(void* ptr)
 {
 	CloseHandle(static_cast<HANDLE>(ptr));

@@ -13,9 +13,11 @@
 #include "common/HostSys.h"
 #include "common/Path.h"
 #include "common/StringUtil.h"
+#include "common/Threading.h"
 
 #include <array>
 #include <chrono>
+#include <thread>
 
 #include "Config.h"
 #include "Host.h"
@@ -161,6 +163,11 @@ protected:
 	u8* m_mappings[8] = {};
 	void* m_mapping_handles[8] = {};
 
+	std::thread flushThread;
+	std::atomic<bool> stopFlushThread{false};
+	std::mutex flushMutex;
+	std::condition_variable flushCV;
+
 	s64 m_fileSize[8] = {};
 	std::string m_filenames[8] = {};
 	std::vector<u8> m_currentdata;
@@ -191,6 +198,9 @@ public:
 protected:
 	bool Seek(std::FILE* f, u32 adr);
 	bool Create(const char* mcdFile, uint sizeInMB);
+
+	void FlushAllCards();
+	void FlushThreadFunc();
 };
 
 uint FileMcd_GetMtapPort(uint slot)
@@ -259,9 +269,20 @@ FileMemoryCard::FileMemoryCard()
 	{
 		m_fileSize[slot] = -1;
 	}
+	
+	flushThread = std::thread(&FileMemoryCard::FlushThreadFunc, this);
 }
 
-FileMemoryCard::~FileMemoryCard() = default;
+FileMemoryCard::~FileMemoryCard()
+{
+	stopFlushThread = true;
+	flushCV.notify_all();
+	if(flushThread.joinable())
+	{
+		Console.WriteLn("MemoryCards: Waiting on memory card flushing thread.");
+		flushThread.join();
+	}
+}
 
 void FileMemoryCard::Open()
 {
@@ -359,6 +380,7 @@ void FileMemoryCard::Open()
 
 void FileMemoryCard::Close()
 {
+	std::unique_lock<std::mutex> lock(flushMutex);
 	for (int slot = 0; slot < 8; ++slot)
 	{
 		if (!m_file[slot])
@@ -521,6 +543,8 @@ s32 FileMemoryCard::Save(uint slot, const u8* src, u32 adr, int size)
 			Host::OSD_INFO_DURATION);
 		m_lastSaveTime = std::chrono::system_clock::now();
 	}
+
+	flushCV.notify_all();
 	return 1;
 }
 
@@ -576,6 +600,45 @@ u64 FileMemoryCard::GetCRC(uint slot)
 	return retval;
 }
 
+void FileMemoryCard::FlushAllCards()
+{
+	// The lock in FlushThreadFunc should keep us safe from the main thread touching the handles here
+	for(size_t i = 0; i < 8; i++)
+	{
+		if(m_fileSize[i] > 0)
+		{
+			HostSys::FlushMapping(m_mapping_handles[i], m_mappings[i], m_fileSize[i]);
+			FileSystem::FFlush(m_file[i]);
+		}
+	}
+}
+
+void FileMemoryCard::FlushThreadFunc() {
+	Threading::SetNameOfCurrentThread("MemoryCard I/O Flush Thread");
+	while (!stopFlushThread) {
+		std::unique_lock<std::mutex> lock(flushMutex);
+		flushCV.wait(lock, [this] {
+			return stopFlushThread || MemcardBusy::IsBusy();
+		});
+		Console.Warning("!! Memory card is busy, waiting to commit to disk!");
+		while (!stopFlushThread) {
+			if (!MemcardBusy::IsBusy()) {
+				FlushAllCards();
+				Console.Warning("!! Memory card committed to disk!");
+				break;
+			}
+
+			lock.unlock();
+			Threading::Sleep(50);
+			lock.lock();
+		}
+	}
+	// In the event that the user closes PCSX2 while the memory card is busy (against our recommendations!!)
+	// we can at least ensure that the memory card is flushed to disk.
+	FlushAllCards();
+}
+
+
 // --------------------------------------------------------------------------------------
 //  MemoryCard Component API Bindings
 // --------------------------------------------------------------------------------------
@@ -621,7 +684,6 @@ void FileMcd_EmuOpen()
 	if (FileMcd_Open)
 		return;
 	FileMcd_Open = true;
-
 
 	Mcd::impl.Open();
 	Mcd::implFolder.SetFiltering(EmuConfig.McdFolderAutoManage);

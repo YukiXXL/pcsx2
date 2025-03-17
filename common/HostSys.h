@@ -106,6 +106,7 @@ namespace HostSys
 	extern void* CreateMappingFromFile(FILE* file);
 	extern void* MapMapping(void* handle, size_t size, const PageProtectionMode& mode);
 	extern void DestroyMapping(void* handle);
+	extern void FlushMapping(void* handle, void* baseAddr, size_t size);
 
 	extern void DestroySharedMemory(void* ptr);
 	extern void* MapSharedMemory(void* handle, size_t offset, void* baseaddr, size_t size, const PageProtectionMode& mode);

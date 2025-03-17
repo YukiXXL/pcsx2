@@ -373,6 +373,11 @@ void HostSys::DestroyMapping(void* handle)
 	return;
 }
 
+void HostSys::FlushMapping(void* handle, [[maybe_unused]] void* baseAddr, size_t size)
+{
+	msync(handle, size, MS_SYNC);
+}
+
 void HostSys::DestroySharedMemory(void* ptr)
 {
 	mach_port_deallocate(mach_task_self(), static_cast<mach_port_t>(reinterpret_cast<uintptr_t>(ptr)));
