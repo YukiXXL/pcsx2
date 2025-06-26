@@ -2575,19 +2575,8 @@ void GSDeviceOGL::RenderHW(GSHWDrawConfig& config)
 	psel.ps.key_hi = config.ps.key_hi;
 	psel.ps.key_lo = config.ps.key_lo;
 	std::memset(psel.pad, 0, sizeof(psel.pad));
-
 	SetupPipeline(psel);
 
-	const bool check_barrier = !(config.require_one_barrier && !m_features.texture_barrier);
-
-	// Be careful of the rt already being bound and the blend using the RT without a barrier.
-	if (check_barrier && ((config.tex && (config.tex == config.ds || config.tex == config.rt)) || ((psel.ps.IsFeedbackLoop() || psel.ps.blend_c == 1) && GLState::rt == config.rt)))
-	{
-		// Ensure all depth writes are finished before sampling
-		GL_INS("GL: Texture barrier to flush depth or rt before reading");
-		g_perfmon.Put(GSPerfMon::Barriers, 1);
-		glTextureBarrier();
-	}
 	// additional non-pipeline config stuff
 	const bool point_size_enabled = config.vs.point_size;
 	if (GLState::point_size != point_size_enabled)
@@ -2643,18 +2632,30 @@ void GSDeviceOGL::RenderHW(GSHWDrawConfig& config)
 		OMSetBlendState();
 	}
 
-	// avoid changing framebuffer just to switch from rt+depth to rt and vice versa
+	// Avoid changing framebuffer just to switch from rt+depth to rt and vice versa.
 	GSTexture* draw_rt = colclip_rt ? colclip_rt : config.rt;
 	GSTexture* draw_ds = config.ds;
-	if (!draw_rt && GLState::rt && GLState::ds == draw_ds && config.tex != GLState::rt &&
-		GLState::rt->GetSize() == draw_ds->GetSize())
+	// Check if we need a barrier, aka make sure no tex is bound as both rtv and srv at the same time.
+	const bool needs_barrier = m_features.texture_barrier && ((config.tex && ((config.tex == config.rt) || (config.tex == config.ds))) || (GLState::tex_unit[2] && !draw_rt_clone));
+	if (!draw_rt && draw_ds && GLState::rt && GLState::ds == draw_ds &&
+		config.tex != GLState::rt && GLState::rt->GetSize() == draw_ds->GetSize())
 	{
 		draw_rt = GLState::rt;
+		if (needs_barrier)
+		{
+			g_perfmon.Put(GSPerfMon::Barriers, 1);
+			glTextureBarrier();
+		}
 	}
-	else if (!draw_ds && GLState::ds && GLState::rt == draw_rt && config.tex != GLState::ds &&
-			 GLState::ds->GetSize() == draw_rt->GetSize())
+	else if (!draw_ds && draw_rt && GLState::ds && GLState::rt == draw_rt &&
+		config.tex != GLState::ds && GLState::ds->GetSize() == draw_rt->GetSize())
 	{
 		draw_ds = GLState::ds;
+		if (needs_barrier)
+		{
+			g_perfmon.Put(GSPerfMon::Barriers, 1);
+			glTextureBarrier();
+		}
 	}
 
 	OMSetRenderTargets(draw_rt, draw_ds, &config.scissor);
