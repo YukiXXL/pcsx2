@@ -2636,12 +2636,12 @@ void GSDeviceOGL::RenderHW(GSHWDrawConfig& config)
 	GSTexture* draw_rt = colclip_rt ? colclip_rt : config.rt;
 	GSTexture* draw_ds = config.ds;
 	// Check if we need a barrier, aka make sure no tex is bound as both rtv and srv at the same time.
-	const bool needs_barrier = m_features.texture_barrier && ((config.tex && ((config.tex == config.rt) || (config.tex == config.ds))) || (GLState::tex_unit[2] && !draw_rt_clone));
+	const bool is_barrier_enabled = m_features.texture_barrier && psel.ps.IsFeedbackLoop() && (config.require_one_barrier || config.require_full_barrier);
 	if (!draw_rt && draw_ds && GLState::rt && GLState::ds == draw_ds &&
 		config.tex != GLState::rt && GLState::rt->GetSize() == draw_ds->GetSize())
 	{
 		draw_rt = GLState::rt;
-		if (needs_barrier)
+		if (m_features.texture_barrier && !is_barrier_enabled && (GLState::rt_was_tex_is_rt || GLState::rt_was_feedback_loop))
 		{
 			g_perfmon.Put(GSPerfMon::Barriers, 1);
 			glTextureBarrier();
@@ -2651,12 +2651,17 @@ void GSDeviceOGL::RenderHW(GSHWDrawConfig& config)
 		config.tex != GLState::ds && GLState::ds->GetSize() == draw_rt->GetSize())
 	{
 		draw_ds = GLState::ds;
-		if (needs_barrier)
+		if (m_features.texture_barrier && !is_barrier_enabled && GLState::ds_was_tex_is_ds)
 		{
 			g_perfmon.Put(GSPerfMon::Barriers, 1);
 			glTextureBarrier();
 		}
 	}
+	
+	// We want to save the state for the next draw.
+	GLState::rt_was_tex_is_rt = config.tex && (config.tex == config.rt);
+	GLState::ds_was_tex_is_ds = config.tex && (config.tex == config.ds);
+	GLState::rt_was_feedback_loop = is_barrier_enabled;
 
 	OMSetRenderTargets(draw_rt, draw_ds, &config.scissor);
 	OMSetColorMaskState(config.colormask);

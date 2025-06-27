@@ -40,6 +40,9 @@ namespace GLState
 
 	extern GSTextureOGL* rt; // render target
 	extern GSTextureOGL* ds; // Depth-Stencil
+	extern bool rt_was_tex_is_rt; // previous draw tex is fb
+	extern bool ds_was_tex_is_ds; // previous draw tex is ds
+	extern bool rt_was_feedback_loop; // previous draw feedbackloop
 	extern GLuint tex_unit[8]; // shader input texture
 	extern GLuint64 tex_handle[8]; // shader input texture
 

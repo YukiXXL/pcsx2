@@ -36,6 +36,9 @@ namespace GLState
 
 	GSTextureOGL* rt = nullptr;
 	GSTextureOGL* ds = nullptr;
+	bool rt_was_tex_is_rt = false;
+	bool ds_was_tex_is_ds = false;
+	bool rt_was_feedback_loop = false;
 	GLuint tex_unit[8];
 	GLuint64 tex_handle[8];
 
@@ -67,6 +70,9 @@ namespace GLState
 
 		rt = nullptr;
 		ds = nullptr;
+		rt_was_tex_is_rt = false;
+		ds_was_tex_is_ds = false;
+		rt_was_feedback_loop = false;
 		std::fill(std::begin(tex_unit), std::end(tex_unit), 0);
 		std::fill(std::begin(tex_handle), std::end(tex_handle), 0);
 	}
