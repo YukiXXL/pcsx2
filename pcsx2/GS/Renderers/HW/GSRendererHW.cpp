@@ -7400,7 +7400,13 @@ __ri void GSRendererHW::DrawPrims(GSTextureCache::Target* rt, GSTextureCache::Ta
 		else if ((features.texture_barrier && m_prim_overlap == PRIM_OVERLAP_NO) || m_texture_shuffle)
 		{
 			GL_PERF("DATE: Accurate with %s", (features.texture_barrier && m_prim_overlap == PRIM_OVERLAP_NO) ? "no overlap" : "texture shuffle");
-			if (features.texture_barrier)
+			if (!m_texture_shuffle && blend_alpha_min == blend_alpha_max)
+			{
+				m_conf.ps.rt_alpha = 1;
+				m_conf.cb_ps.RTAlpha.r = blend_alpha_min / 128.0f;
+				DATE_BARRIER = true;
+			}
+			else if (features.texture_barrier)
 			{
 				m_conf.require_full_barrier = true;
 				DATE_BARRIER = true;

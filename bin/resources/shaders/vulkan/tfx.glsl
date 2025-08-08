@@ -290,6 +290,7 @@ void main()
 #define PS_ZCLAMP 0
 #define PS_FEEDBACK_LOOP 0
 #define PS_TEX_IS_FB 0
+#define PS_RT_ALPHA 0
 #endif
 
 #define SW_BLEND (PS_BLEND_A || PS_BLEND_B || PS_BLEND_D)
@@ -320,6 +321,8 @@ layout(std140, set = 0, binding = 1) uniform cb1
 	mat4 DitherMatrix;
 	float ScaledScaleFactor;
 	float RcpScaleFactor;
+	vec2 pad1;
+	float RT_Alpha;
 };
 
 layout(location = 0) in VSOutput
@@ -1240,6 +1243,8 @@ void main()
 #if PS_WRITE_RG == 1
 	// Pseudo 16 bits access.
 	float rt_a = sample_from_rt().g;
+#elif PS_RT_ALPHA == 1
+	float rt_a = RT_Alpha;
 #else
 	float rt_a = sample_from_rt().a;
 #endif

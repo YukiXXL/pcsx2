@@ -352,6 +352,7 @@ struct alignas(16) GSHWDrawConfig
 				u32 shuffle_across : 1;
 				u32 write_rg : 1;
 				u32 fbmask   : 1;
+				u32 rt_alpha : 1;
 
 				// Blend and Colclip
 				u32 blend_a        : 2;
@@ -606,6 +607,8 @@ struct alignas(16) GSHWDrawConfig
 		GSVector4 DitherMatrix[4];
 
 		GSVector4 ScaleFactor;
+
+		GSVector2 RTAlpha;
 
 		__fi PSConstantBuffer()
 		{
